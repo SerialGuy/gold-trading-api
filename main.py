@@ -36,11 +36,20 @@ from pathlib import Path
 import httpx
 import subprocess
 
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv is optional, continue without it
+    pass
+
 warnings.filterwarnings('ignore')
 
 # Configure logging
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -72,17 +81,19 @@ current_data = None
 latest_prediction = None
 scheduler_thread = None
 
-# Configuration
+# Configuration - Load from environment variables
 CONFIG = {
-    'data_file': 'gold_processed_data.csv',
+    'data_file': os.getenv('DATA_FILE', 'gold_processed_data.csv'),
     'model_path': 'model.h5',
     'scaler_path': 'scaler.pkl',
-    'model_url': 'https://github.com/yourusername/yourrepo/releases/download/v1/model.h5',
-    'scaler_url': 'https://github.com/yourusername/yourrepo/releases/download/v1/scaler.pkl',
-    'update_interval_hours': 1,
-    'seq_len': 60,
-    'prediction_hours': 5,
-    'fallback_mode': True  # Use fallback methods when external services fail
+    'model_url': os.getenv('MODEL_URL', 'https://github.com/yourusername/yourrepo/releases/download/v1/model.h5'),
+    'scaler_url': os.getenv('SCALER_URL', 'https://github.com/yourusername/yourrepo/releases/download/v1/scaler.pkl'),
+    'update_interval_hours': int(os.getenv('UPDATE_INTERVAL_HOURS', '1')),
+    'seq_len': int(os.getenv('SEQUENCE_LENGTH', '60')),
+    'prediction_hours': int(os.getenv('PREDICTION_HOURS', '5')),
+    'fallback_mode': os.getenv('FALLBACK_MODE', 'true').lower() == 'true',
+    'tensorflow_enabled': os.getenv('TENSORFLOW_ENABLED', 'true').lower() == 'true',
+    'economic_data_enabled': os.getenv('ECONOMIC_DATA_ENABLED', 'false').lower() == 'true'
 }
 
 class AutomatedDataPipeline:
@@ -95,6 +106,11 @@ class AutomatedDataPipeline:
 
     async def fetch_economic_data(self, start_date, end_date):
         """Fetch economic calendar data"""
+        # Check if economic data is enabled
+        if not CONFIG.get('economic_data_enabled', False):
+            logger.info("Economic data fetching is disabled")
+            return pd.DataFrame()
+            
         logger.info("Fetching economic data...")
 
         try:
@@ -1198,8 +1214,8 @@ async def manual_update(background_tasks: BackgroundTasks):
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 8000)),
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
         reload=False,
-        log_level="info"
+        log_level=os.getenv("LOG_LEVEL", "info").lower()
     )
