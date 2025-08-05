@@ -597,6 +597,8 @@ class AutomatedDataPipeline:
             if economic_data is not None and not economic_data.empty:
                 # Ensure both have timestamp columns
                 if 'timestamp' in combined_df.columns and 'timestamp' in economic_data.columns:
+                    combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'], errors='coerce')
+                    economic_data['timestamp'] = pd.to_datetime(economic_data['timestamp'], errors='coerce')
                     # Round timestamps to nearest hour for matching
                     combined_df['timestamp_hour'] = combined_df['timestamp'].dt.floor('H')
                     econ_df_hour = economic_data.copy()
@@ -1197,7 +1199,7 @@ async def health_check():
 @app.post("/manual-update")
 async def manual_update():
     """Manually trigger data update and prediction"""
-    asyncio.run(update_data_and_predict())
+    await update_data_and_predict()
     return {"message": "Manual update triggered"}
 
 if __name__ == "__main__":
