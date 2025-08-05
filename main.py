@@ -583,7 +583,7 @@ class AutomatedDataPipeline:
 
     async def combine_datasets(self, gold_data, economic_data):
         """Combine gold and economic data"""
-        if self.gold_data is None:
+        if gold_data is None:
             logger.info("❌ No gold data available for combination")
             return None
 
@@ -591,15 +591,15 @@ class AutomatedDataPipeline:
 
         try:
             # Start with gold data
-            combined_df = self.gold_data.copy()
+            combined_df = gold_data.copy()
 
             # If we have economic data, merge it
-            if self.economic_data is not None and not self.economic_data.empty:
+            if economic_data is not None and not economic_data.empty:
                 # Ensure both have timestamp columns
-                if 'timestamp' in combined_df.columns and 'timestamp' in self.economic_data.columns:
+                if 'timestamp' in combined_df.columns and 'timestamp' in economic_data.columns:
                     # Round timestamps to nearest hour for matching
                     combined_df['timestamp_hour'] = combined_df['timestamp'].dt.floor('H')
-                    econ_df_hour = self.economic_data.copy()
+                    econ_df_hour = economic_data.copy()
                     econ_df_hour['timestamp_hour'] = econ_df_hour['timestamp'].dt.floor('H')
 
                     # ✅ Fix timezone handling - ensure both are timezone-naive
