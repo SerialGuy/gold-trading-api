@@ -5,7 +5,7 @@ python-multipart==0.0.6
 
 # Data processing and analysis
 pandas==2.1.3
-numpy==1.24.3
+numpy==2.0.2
 scikit-learn==1.3.2
 
 # Technical analysis indicators
@@ -24,7 +24,7 @@ aiofiles==23.2.1
 textblob==0.17.1
 
 # Machine Learning (optional - TensorFlow)
-tensorflow==2.15.0
+tensorflow==2.18.0
 
 # Job scheduling
 schedule==1.2.0
