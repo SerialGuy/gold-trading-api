@@ -288,12 +288,6 @@ class AutomatedDataPipeline:
                 except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                     return False
 
-            # Check installation
-            dukascopy_available = await loop.run_in_executor(None, check_dukascopy)
-            
-            if not dukascopy_available:
-                logger.info("dukascopy-node not found. Using fallback method...")
-                return await self.fetch_fallback_gold_data(start_date, end_date)
 
             # Fetch data using dukascopy-node
             def fetch_with_dukascopy():
@@ -941,22 +935,23 @@ async def download_model_files():
     if not TENSORFLOW_AVAILABLE:
         logger.info("TensorFlow not available. Skipping model download.")
         return
-        
-    async with httpx.AsyncClient() as client:
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         for file_path, url in [(CONFIG['model_path'], CONFIG['model_url']),
-                              (CONFIG['scaler_path'], CONFIG['scaler_url'])]:
+                               (CONFIG['scaler_path'], CONFIG['scaler_url'])]:
             if not os.path.exists(file_path):
                 try:
                     logger.info(f"Downloading {file_path}...")
                     response = await client.get(url)
                     response.raise_for_status()
-                    
+
                     async with aiofiles.open(file_path, 'wb') as f:
                         await f.write(response.content)
-                    
+
                     logger.info(f"Downloaded {file_path}")
                 except Exception as e:
                     logger.warning(f"Failed to download {file_path}: {e}")
+
 
 async def load_model_and_scaler():
     """Load model and scaler"""
