@@ -282,8 +282,8 @@ class AutomatedDataPipeline:
             
             def check_dukascopy():
                 try:
-                    result = subprocess.run(["npx", "dukascopy-node", "--version"],
-                                         capture_output=True, check=True, timeout=30)
+                    subprocess.run(["npm", "install", "-g", "dukascopy-node"], check=True)
+                    logger.info("✅ dukascopy-node installed successfully")
                     return True
                 except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                     return False
@@ -370,7 +370,7 @@ class AutomatedDataPipeline:
             loop = asyncio.get_event_loop()
             
             def fetch_data():
-                gold_ticker = yf.Ticker("GC=F")  # Gold futures
+                gold_ticker = "GC=F" # Gold futures
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
 
@@ -378,13 +378,7 @@ class AutomatedDataPipeline:
                     gold_df = gold_ticker.history(start=start_dt, end=end_dt, interval="1h")
                 except:
                     logger.warning("Hourly data not available, fetching daily data...")
-                    gold_df = gold_ticker.history(start=start_dt, end=end_dt, interval="1d")
-
-                if gold_df.empty:
-                    # Try GLD ETF as backup
-                    logger.warning("Trying GLD ETF as backup...")
-                    gold_ticker = yf.Ticker("GLD")
-                    gold_df = gold_ticker.history(start=start_dt, end=end_dt, interval="1h")
+                    gold_df = yf.download(gold_ticker,start=start_dt, end=end_dt)
 
                 return gold_df
 
