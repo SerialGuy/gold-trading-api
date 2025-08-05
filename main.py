@@ -106,11 +106,10 @@ class AutomatedDataPipeline:
 
     async def fetch_economic_data(self, start_date, end_date):
         """Fetch economic calendar data"""
-        # Check if economic data is enabled
         if not CONFIG.get('economic_data_enabled', False):
             logger.info("Economic data fetching is disabled")
             return pd.DataFrame()
-            
+
         try:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime.now()
@@ -123,13 +122,20 @@ class AutomatedDataPipeline:
                 'countries': ','.join(['US', 'CN', 'IN', 'EU', 'GB', 'RU', 'AU'])
             }
 
-            response = requests.get(url, headers=headers, params=payload, timeout=30)
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, params=payload, timeout=30)
 
             if response.status_code == 200:
                 data = response.json()
                 if 'result' in data and data['result']:
                     econ_df = pd.DataFrame(data['result'])
-                    processed_econ = self.process_economic_data(econ_df)
+
+                    # await this if it's an async function
+                    if asyncio.iscoroutinefunction(self.process_economic_data):
+                        processed_econ = await self.process_economic_data(econ_df)
+                    else:
+                        processed_econ = self.process_economic_data(econ_df)
+
                     print(f"✅ Economic data fetched: {len(processed_econ)} records")
                     self.economic_data = processed_econ
                     return processed_econ
