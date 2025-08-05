@@ -1038,46 +1038,48 @@ def run_scheduler():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
     global data_pipeline, trading_system, current_data, scheduler_thread
-    
-    # Startup
+
     logger.info("Starting FastAPI Gold Trading System...")
-    
-    # Initialize components
+
+    # Initialize data pipeline
     data_pipeline = AutomatedDataPipeline()
     
-    # Load model and scaler
-    model, scaler = await load_model_and_scaler()
-    trading_system = GoldTradingSignalSystem(model, scaler, CONFIG['seq_len'])
-    
-    # Initial data load
-    if not os.path.exists(CONFIG['data_file']):
-        logger.info("Initial data load...")
-        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        current_data = await data_pipeline.run_pipeline(start_date=start_date)
-    else:
+    # Background task for slow initializations
+    async def background_setup():
+        global trading_system, current_data
+
         try:
-            current_data = pd.read_csv(CONFIG['data_file'])
-            current_data['timestamp'] = pd.to_datetime(current_data['timestamp'])
-            logger.info(f"Loaded existing data: {len(current_data)} records")
+            model, scaler = await load_model_and_scaler()
+            trading_system = GoldTradingSignalSystem(model, scaler, CONFIG['seq_len'])
+
+            # Load data
+            if not os.path.exists(CONFIG['data_file']):
+                logger.info("Initial data load...")
+                start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+                current_data = await data_pipeline.run_pipeline(start_date=start_date)
+            else:
+                current_data = pd.read_csv(CONFIG['data_file'])
+                current_data['timestamp'] = pd.to_datetime(current_data['timestamp'])
+                logger.info(f"Loaded existing data: {len(current_data)} records")
+
+            # Initial prediction
+            if current_data is not None and len(current_data) >= CONFIG['seq_len']:
+                await update_data_and_predict()
+
         except Exception as e:
-            logger.error(f"Error loading existing data: {e}")
-            current_data = None
-    
-    # Make initial prediction
-    if current_data is not None and len(current_data) >= CONFIG['seq_len']:
-        await update_data_and_predict()
-    
-    # Start scheduler thread
+            logger.error(f"Background setup error: {e}")
+
+    asyncio.create_task(background_setup())  # ✅ Don't block lifespan
+
+    # Start scheduler
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
     logger.info("Scheduler started")
-    
+
     yield
-    
-    # Shutdown
     logger.info("Shutting down...")
+
 
 # FastAPI app
 app = FastAPI(
