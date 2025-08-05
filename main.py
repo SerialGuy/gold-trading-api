@@ -958,26 +958,39 @@ async def load_model_and_scaler():
     if not TENSORFLOW_AVAILABLE:
         logger.info("TensorFlow not available. ML predictions will be disabled.")
         return None, None
-        
+
     try:
         await download_model_files()
-        
+
         if os.path.exists(CONFIG['model_path']) and os.path.exists(CONFIG['scaler_path']):
             loop = asyncio.get_event_loop()
-            
+
             def load_files():
-                model = load_model(CONFIG['model_path'], compile=False)
-                model.compile(optimizer='adam', loss='mse')
-                scaler = joblib.load(CONFIG['scaler_path'])
+                try:
+                    model = load_model(CONFIG['model_path'], compile=False)
+                    model.compile(optimizer='adam', loss='mse')
+                except Exception as model_error:
+                    logger.warning(f"Error loading model: {model_error}")
+                    model = None
+                try:
+                    scaler = joblib.load(CONFIG['scaler_path'])
+                except Exception as scaler_error:
+                    logger.warning(f"Error loading scaler: {scaler_error}")
+                    scaler = None
                 return model, scaler
-            
+
             model, scaler = await loop.run_in_executor(None, load_files)
-            logger.info("Model and scaler loaded successfully")
-            return model, scaler
+
+            if model is not None and scaler is not None:
+                logger.info("Model and scaler loaded successfully")
+                return model, scaler
+            else:
+                logger.warning("Model or scaler loading failed. Using simple prediction method.")
+                return None, None
         else:
             logger.warning("Model or scaler files not found. Using simple prediction method.")
             return None, None
-            
+
     except Exception as e:
         logger.warning(f"Error loading model/scaler: {e}. Using simple prediction method.")
         return None, None
@@ -1195,9 +1208,9 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.post("/manual-update")
-async def manual_update(background_tasks: BackgroundTasks):
+async def manual_update():
     """Manually trigger data update and prediction"""
-    background_tasks.add_task(update_data_and_predict)
+    asyncio.run(update_data_and_predict())
     return {"message": "Manual update triggered"}
 
 if __name__ == "__main__":

@@ -4,11 +4,18 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + Node.js (LTS)
 RUN apt-get update && apt-get install -y \
+    curl \
+    gnupg \
     gcc \
     g++ \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Verify Node.js & npm installed
+RUN node -v && npm -v
 
 # Copy requirements first for better caching
 COPY requirements.txt .
