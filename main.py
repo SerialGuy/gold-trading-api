@@ -1095,6 +1095,7 @@ async def root():
         "endpoints": [
             "/prediction",
             "/historical",
+            "/data",
             "/status",
             "/health"
         ]
@@ -1139,7 +1140,7 @@ async def get_historical_data(hours: int = 60):
                 'high': float(row['high']),
                 'low': float(row['low']),
                 'close': float(row['close']),
-                'change': float(row['change']),
+                'change': float(row.get('change', 0.0)),  # Use .get() with default value
                 'RSI': float(row.get('RSI', 50)),
                 'MACD': float(row.get('MACD', 0)),
                 'MACD_signal': float(row.get('MACD_signal', 0)),
@@ -1201,6 +1202,104 @@ async def manual_update():
     """Manually trigger data update and prediction"""
     await update_data_and_predict()
     return {"message": "Manual update triggered"}
+
+@app.get("/data")
+async def get_data_with_prediction(records: int = 60):
+    """Get historical data with next hour prediction"""
+    global current_data, latest_prediction, trading_system
+    
+    if current_data is None or len(current_data) == 0:
+        raise HTTPException(status_code=503, detail="No historical data available")
+    
+    try:
+        # Get last N records of historical data
+        recent_data = current_data.tail(records).copy()
+        
+        # Convert to JSON-serializable format
+        historical_records = []
+        for _, row in recent_data.iterrows():
+            record = {
+                'timestamp': row['timestamp'].isoformat(),
+                'open': float(row['open']),
+                'high': float(row['high']),
+                'low': float(row['low']),
+                'close': float(row['close']),
+                'change': float(row.get('change', 0.0)),
+                'volume': float(row.get('volume', 0.0)),  # Add volume if available
+                'RSI': float(row.get('RSI', 50)),
+                'MACD': float(row.get('MACD', 0)),
+                'MACD_signal': float(row.get('MACD_signal', 0)),
+                'MACD_diff': float(row.get('MACD_diff', 0)),
+                'SMA_20': float(row.get('SMA_20', row['close'])),
+                'SMA_50': float(row.get('SMA_50', row['close'])),
+                'EMA_12': float(row.get('EMA_12', row['close'])),
+                'EMA_26': float(row.get('EMA_26', row['close'])),
+                'BB_upper': float(row.get('BB_upper', row['close'] * 1.02)),
+                'BB_lower': float(row.get('BB_lower', row['close'] * 0.98)),
+                'BB_middle': float(row.get('BB_middle', row['close'])),
+                'BB_width': float(row.get('BB_width', 0.04)),
+                'ATR': float(row.get('ATR', row['close'] * 0.01))
+            }
+            historical_records.append(record)
+        
+        # Generate prediction for next hour
+        next_hour_prediction = None
+        if trading_system is not None and len(current_data) >= CONFIG['seq_len']:
+            try:
+                # Make prediction for next hour only
+                prediction_result = await trading_system.make_multi_hour_prediction(
+                    current_data.tail(CONFIG['seq_len']),
+                    hours_ahead=1
+                )
+                
+                if prediction_result and 'multi_hour_predictions' in prediction_result:
+                    next_hour_data = prediction_result['multi_hour_predictions'][0]
+                    current_close = float(current_data['close'].iloc[-1])
+                    
+                    next_hour_prediction = {
+                        'timestamp': next_hour_data['timestamp'],
+                        'open': current_close,  # Use current close as next open
+                        'high': float(next_hour_data['predicted_price'] * 1.005),  # Estimate high
+                        'low': float(next_hour_data['predicted_price'] * 0.995),   # Estimate low
+                        'close': float(next_hour_data['predicted_price']),
+                        'change': float(next_hour_data['predicted_change']),
+                        'volume': 0.0,  # Prediction doesn't have volume
+                        'RSI': 50.0,  # Default values for prediction
+                        'MACD': 0.0,
+                        'MACD_signal': 0.0,
+                        'MACD_diff': 0.0,
+                        'SMA_20': float(next_hour_data['predicted_price']),
+                        'SMA_50': float(next_hour_data['predicted_price']),
+                        'EMA_12': float(next_hour_data['predicted_price']),
+                        'EMA_26': float(next_hour_data['predicted_price']),
+                        'BB_upper': float(next_hour_data['predicted_price'] * 1.02),
+                        'BB_lower': float(next_hour_data['predicted_price'] * 0.98),
+                        'BB_middle': float(next_hour_data['predicted_price']),
+                        'BB_width': 0.04,
+                        'ATR': float(next_hour_data['predicted_price'] * 0.01),
+                        'is_prediction': True,  # Flag to identify this as prediction
+                        'confidence': float(next_hour_data['confidence_decay'] * 100)
+                    }
+            except Exception as e:
+                logger.warning(f"Could not generate prediction: {e}")
+        
+        # Combine historical data with prediction
+        all_records = historical_records.copy()
+        if next_hour_prediction:
+            all_records.append(next_hour_prediction)
+        
+        return JSONResponse(content={
+            'data': all_records,
+            'historical_count': len(historical_records),
+            'prediction_count': 1 if next_hour_prediction else 0,
+            'total_records': len(all_records),
+            'last_updated': current_data['timestamp'].max().isoformat() if len(current_data) > 0 else None,
+            'prediction_available': next_hour_prediction is not None
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting data with prediction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(
