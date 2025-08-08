@@ -699,11 +699,11 @@ class GoldTradingSignalSystem:
         self.predictions_history = []
 
         self.signal_thresholds = {
-            'strong_buy': 0.15,
-            'buy': 0.05,
-            'hold': 0.02,
-            'sell': -0.05,
-            'strong_sell': -0.15
+            'strong_buy': 0.5,
+            'buy': 0.2,
+            'hold': 0.05,
+            'sell': -0.2,
+            'strong_sell': -0.5
         }
 
     def prepare_data_for_prediction(self, data_df):
@@ -780,7 +780,7 @@ class GoldTradingSignalSystem:
             cumulative_change = 0
 
             for hour in range(1, hours_ahead + 1):
-                decay_factor = 0.85 ** (hour - 1)
+                decay_factor = 0.95 ** (hour - 1)  # Gentler decay
                 hourly_change = predicted_change * decay_factor
                 cumulative_change += hourly_change
 
@@ -833,7 +833,7 @@ class GoldTradingSignalSystem:
             cumulative_change = 0
             
             for hour in range(1, hours_ahead + 1):
-                decay_factor = 0.9 ** (hour - 1)
+                decay_factor = 0.95 ** (hour - 1)  # Consistent with ML model
                 hourly_change = recent_changes * decay_factor
                 cumulative_change += hourly_change
                 
@@ -884,24 +884,24 @@ class GoldTradingSignalSystem:
 
             weighted_prediction = (short_term_avg * 0.5 + medium_term_avg * 0.3 + long_term_avg * 0.2)
 
-            # Generate signal
+            # Generate signal with more realistic thresholds
             if weighted_prediction >= self.signal_thresholds['strong_buy']:
                 signal = 'STRONG_BUY'
-                strength = min(10, int(weighted_prediction * 20))
+                strength = min(10, int(abs(weighted_prediction) * 10))
             elif weighted_prediction >= self.signal_thresholds['buy']:
                 signal = 'BUY'
-                strength = min(7, int(weighted_prediction * 25))
+                strength = min(7, int(abs(weighted_prediction) * 15))
             elif weighted_prediction <= self.signal_thresholds['strong_sell']:
                 signal = 'STRONG_SELL'
-                strength = min(10, int(abs(weighted_prediction) * 20))
+                strength = min(10, int(abs(weighted_prediction) * 10))
             elif weighted_prediction <= self.signal_thresholds['sell']:
                 signal = 'SELL'
-                strength = min(7, int(abs(weighted_prediction) * 25))
+                strength = min(7, int(abs(weighted_prediction) * 15))
             else:
                 signal = 'HOLD'
                 strength = 1
 
-            confidence = min(100, max(10, 50 + (strength * 5)))
+            confidence = min(100, max(10, 50 + (strength * 3)))
 
             return {
                 'action': signal,
